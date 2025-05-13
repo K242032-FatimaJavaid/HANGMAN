@@ -4,6 +4,7 @@
 #include <cctype>
 #include <ctime>
 #include <windows.h>
+#include <conio.h>
 
 using namespace std;
 
@@ -17,7 +18,7 @@ using namespace std;
 #define MAGENTA "\033[35m"
 #define YELLOW "\033[33m"
 
-class HangmanGame {
+class Gameplay {
 private:
     string selectedWord;
     string hint;
@@ -30,6 +31,7 @@ private:
     int gameCheck;
     int complete;
     static int highestScore;
+    public:
 
     void enableAnsi() {
         HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -38,7 +40,10 @@ private:
         dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
         SetConsoleMode(hOut, dwMode);
     }
-
+	int  space(){
+  			   cin.ignore();
+      return 0;
+	}
     void playSound(const string& soundType) {
         if (soundType == "correct") {
             Beep(600, 300);
@@ -159,41 +164,60 @@ private:
     }
 
     void saveGame(const string& userId, int score, const string& selectedWord, 
-                 const string& display, int guesses, int hintCount, const string& hint) {
-        fstream file("resume.txt", ios::in | ios::out);
-        if (!file.is_open()) {
-            file.open("resume.txt", ios::out);
-            if (!file.is_open()) {
-                cout << "Error opening file.\n";
-                return;
-            }
-        }
+              const string& display, int guesses, int hintCount, const string& hint) {
+    ifstream infile("resume.txt");
+    ofstream tempfile("temp.txt");
 
-        string line;
-        streampos foundPos = -1;
-        while (getline(file, line)) {
-            if (line == userId) {
-                foundPos = file.tellg();
-                break;
-            }
-        }
-
-        string gameData = userId + "\n" + to_string(score) + "\n" + selectedWord + "\n" + 
-                         display + "\n" + to_string(guesses) + "\n" + 
-                         to_string(hintCount) + "\n" + hint + "\n";
-
-        if (foundPos != -1) {
-            file.seekp(foundPos - streampos(line.length() + 1));
-            file << gameData;
-            cout << "GAME SAVED...\n";
-        } else {
-            file.seekp(0, ios::end);
-            file << gameData;
-            cout << "GAME SAVED...\n";
-        }
-
-        file.close();
+    if (!tempfile.is_open()) {
+        cout << "Error creating temporary file.\n";
+        return;
     }
+
+    bool updated = false;
+    string line;
+
+    while (getline(infile, line)) {
+        if (line == userId) {
+          
+            for (int i = 0; i < 6; i++) {
+                getline(infile, line);
+            }
+
+            // Write updated data
+            tempfile << userId << endl;
+            tempfile << score << endl;
+            tempfile << selectedWord << endl;
+            tempfile << display << endl;
+            tempfile << guesses << endl;
+            tempfile << hintCount << endl;
+            tempfile << hint << endl;
+
+            updated = true;
+        } else {
+          
+            tempfile << line << endl;
+        }
+    }
+
+    if (!updated) {
+        tempfile << userId << endl;
+        tempfile << score << endl;
+        tempfile << selectedWord << endl;
+        tempfile << display << endl;
+        tempfile << guesses << endl;
+        tempfile << hintCount << endl;
+        tempfile << hint << endl;
+    }
+
+    infile.close();
+    tempfile.close();
+
+    remove("resume.txt");
+    rename("temp.txt", "resume.txt");
+
+    cout << "GAME SAVED...\n";
+}
+
 
     void chooseCategory(int categoryChoice) {
         const char* animals[20] = {
@@ -558,7 +582,6 @@ private:
             cout << GREEN "Current Word: " << display << endl;
             cout << BLUE "Guess a letter: ";
             cin >> guessedChar;
-            //cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
             guessedChar = tolower(guessedChar);
 
@@ -572,11 +595,13 @@ private:
                     cout << BLUE "\nSorry, no more hints available!\n";
                 }
                 cout << YELLOW "\nPress Enter to continue......\n";
+                space();
                 cin.ignore();
             } else if (guessedChar == '*') {
                 cout << MAGENTA "\nEnter your ID to resume the game (user***): ";
                 cin >> userId;
-               // cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                
+                
                 saveGame(userId, score, selectedWord, display, guessesLeft, hintCount, hint);
                 break;
             } else {
@@ -604,6 +629,7 @@ private:
                     cout << RED "TOTAL SCORE: " << score << endl;
                 }
                 cout << BLUE "\nPress Enter to continue......\n";
+                 space();
                 cin.ignore();
             }
         }
@@ -611,24 +637,24 @@ private:
         if (guessesLeft == 0 && complete == 0) {
             drawHangman(guessesLeft);
             cout << RED "You are out of guesses. Try again later.";
+            cout << RED "\nThe word was : " << selectedWord << endl;
             quitGame();
             playSound("gameOver");
         }
     }
 
     void resumeGame() {
-        string id;
-        int found = 0;
+    string id;
+    int found = 0;
 
-        cout << MAGENTA "Enter your ID to resume the game (user***): ";
-        cin >> userId;
-        cin.ignore();
+    cout << MAGENTA "Enter your ID to resume the game (user***): ";
+    cin >> userId;
+    cin.ignore();
 
+    try {
         ifstream file("resume.txt");
         if (!file.is_open()) {
-            cout << RED "Error: Unable to open file 'resume.txt'.\n";
-            playSound("gameOver");
-            return;
+            throw "Unable to open file 'resume.txt'";
         }
 
         while (getline(file, id)) {
@@ -640,9 +666,8 @@ private:
                     !(file >> guessesLeft) ||
                     !(file >> hintCount) ||
                     !(file.ignore(), getline(file, hint))) {
-                    cout << RED "Error: Malformed file data for ID: " << userId << endl;
                     file.close();
-                    return;
+                    throw "Malformed file data for ID";
                 }
                 break;
             } else {
@@ -655,94 +680,104 @@ private:
         file.close();
 
         if (!found) {
-            cout << RED "\nNo game found for ID: " << userId << ". Please start a new game.\n";
-            playSound("gameOver");
-            return;
+            throw "No game found for ID. Please start a new game";
+        }
+    }
+    catch (const char* str) {
+        cout << RED "Error: " << str;
+        if (strcmp(str, "No game found for ID. Please start a new game") == 0) {
+            cout << ": " << userId;
+        }
+        cout << endl;
+        playSound("gameOver");
+        return;
+    }
+
+    
+    while (guessesLeft > 0) {
+        if (display == selectedWord) {
+            score += 50;
+            playSound("victory");
+            cout << GREEN "\nCongratulations! You guessed the word: " << selectedWord << endl;
+            cout << MAGENTA "You scored a completion bonus of 50 points!\n";
+            cout << GREEN "TOTAL SCORE: " << score << endl;
+            scoreSave(score);
+            break;
         }
 
-        while (guessesLeft > 0) {
-            if (display == selectedWord) {
-                score += 50;
-                playSound("victory");
-                cout << GREEN "\nCongratulations! You guessed the word: " << selectedWord << endl;
-                cout << MAGENTA "You scored a completion bonus of 50 points!\n";
-                cout << GREEN "TOTAL SCORE: " << score << endl;
-                scoreSave(score);
-                break;
-            }
+        cout << "\n==============================\n";
+        if (hintCount == 1) {
+            cout << BLUE "Enter ? for acquiring a hint COST=-20 points.\n";
+        }
+        cout << YELLOW "Enter * to quit and save game.\n";
+        cout << "\n==============================\n";
+        drawHangman(guessesLeft);
+        cout << endl;
 
-            cout << "\n==============================\n";
-            if (hintCount == 1) {
-                cout << BLUE "Enter ? for acquiring a hint COST=-20 points.\n";
-            }
-            cout << YELLOW "Enter * to quit and save game.\n";
-            cout << "\n==============================\n";
-            drawHangman(guessesLeft);
-            cout << endl;
+        char guessedChar;
+        cout << GREEN "Current Word: " << display << endl;
+        cout << BLUE "Guess a letter: ";
+        cin >> guessedChar;
+        
+        guessedChar = tolower(guessedChar);
 
-            char guessedChar;
-            cout << GREEN "Current Word: " << display << endl;
-            cout << BLUE "Guess a letter: ";
-            cin >> guessedChar;
-            //cin.ignore(numeric_limits<streamsize>::max(), '\n');
-
-            guessedChar = tolower(guessedChar);
-
-            if (guessedChar == '?') {
-                if (hintCount > 0) {
-                    cout << "\nHINT: " << hint << endl;
-                    score -= 20;
-                    cout << "\n20 POINTS LOST..\nTOTAL SCORE= " << score << endl;
-                    hintCount--;
-                } else {
-                    cout << "\nSorry, no more hints available!\n";
-                }
-                cout << "\nPress Enter to continue......\n";
-                cin.ignore();
-            } else if (guessedChar == '*') {
-                string saveId = userId;
-                cout << MAGENTA "\nEnter your ID to save the game (user***): ";
-                cin >> saveId;
-                //cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                saveGame(saveId, score, selectedWord, display, guessesLeft, hintCount, hint);
-                break;
+        if (guessedChar == '?') {
+            if (hintCount > 0) {
+                cout << "\nHINT: " << hint << endl;
+                score -= 20;
+                cout << "\n20 POINTS LOST..\nTOTAL SCORE= " << score << endl;
+                hintCount--;
             } else {
-                bool correctGuess = false;
-
-                for (size_t i = 0; i < selectedWord.length(); i++) {
-                    if (tolower(selectedWord[i]) == guessedChar && display[i] == '_') {
-                        display[i] = selectedWord[i];
-                        correctGuess = true;
-                    }
-                }
-
-                if (correctGuess) {
-                    score += 10;
-                    playSound("correct");
-                    cout << GREEN "\nCORRECT GUESS! 10 POINTS GAINED\n";
-                    cout << MAGENTA "GUESSES LEFT: " << guessesLeft << endl;
-                    cout << GREEN "TOTAL SCORE: " << score << endl;
-                } else {
-                    guessesLeft--;
-                    score -= 5;
-                    playSound("incorrect");
-                    cout << RED "\nWRONG GUESS! 5 POINTS LOST\n";
-                    cout << MAGENTA "GUESSES LEFT: " << guessesLeft << endl;
-                    cout << RED "TOTAL SCORE: " << score << endl;
-                }
-                cout << BLUE "\nPress Enter to continue......\n";
-                cin.ignore();
+                cout << "\nSorry, no more hints available!\n";
             }
-        }
+            cout << "\nPress Enter to continue......\n";
+            space();
+            cin.ignore();
+        } else if (guessedChar == '*') {
+            string saveId = userId;
+            cout << MAGENTA "\nEnter your ID to save the game (user***): ";
+            cin >> saveId;
+         
+            saveGame(saveId, score, selectedWord, display, guessesLeft, hintCount, hint);
+            break;
+        } else {
+            bool correctGuess = false;
 
-        if (guessesLeft == 0) {
-            drawHangman(guessesLeft);
-            cout << RED "You are out of guesses. Try again later.\n";
-            quitGame();
-            playSound("gameOver");
+            for (size_t i = 0; i < selectedWord.length(); i++) {
+                if (tolower(selectedWord[i]) == guessedChar && display[i] == '_') {
+                    display[i] = selectedWord[i];
+                    correctGuess = true;
+                }
+            }
+
+            if (correctGuess) {
+                score += 10;
+                playSound("correct");
+                cout << GREEN "\nCORRECT GUESS! 10 POINTS GAINED\n";
+                cout << MAGENTA "GUESSES LEFT: " << guessesLeft << endl;
+                cout << GREEN "TOTAL SCORE: " << score << endl;
+            } else {
+                guessesLeft--;
+                score -= 5;
+                playSound("incorrect");
+                cout << RED "\nWRONG GUESS! 5 POINTS LOST\n";
+                cout << MAGENTA "GUESSES LEFT: " << guessesLeft << endl;
+                cout << RED "TOTAL SCORE: " << score << endl;
+            }
+            cout << BLUE "\nPress Enter to continue......\n";
+            space();
+            cin.ignore();
         }
     }
 
+    if (guessesLeft == 0) {
+        drawHangman(guessesLeft);
+        cout << RED "You are out of guesses. Try again later.\n";
+        cout << RED "\nThe word was : " << selectedWord << endl;
+        quitGame();
+        playSound("gameOver");
+    }
+}
     int menu() {
         int temp = 0;
         cout << BOLD_RED "\n------ HANGMAN GAME ------\n";
@@ -757,12 +792,14 @@ private:
         return temp;
     }
 
-public:
-    HangmanGame() : maxGuesses(6), score(0), gameCheck(0), complete(0) {
+
+    Gameplay() : maxGuesses(6), score(0), gameCheck(0), complete(0) {
         enableAnsi();
     }
-
-    void run() {
+};
+class HangmanGame:public Gameplay{
+	public:
+	void run() {
         int choice = menu();
 
         while (choice < 4) {
@@ -784,9 +821,13 @@ public:
         system("COLOR 0C");
         cout << "Invalid choice, please try again.\n";
     }
+	
+	
 };
+    
 
-int HangmanGame::highestScore = 0;
+
+int Gameplay::highestScore = 0;
 
 int main() {
     HangmanGame game;
